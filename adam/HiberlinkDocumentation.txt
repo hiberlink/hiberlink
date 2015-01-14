@@ -1,0 +1,282 @@
+﻿Hiberlink Documentation
+List of Hiberlink software packages
+ - LTG link extraction prototype
+ - Link error analysis toolkit
+ - Summary file generation scripts for each collection (arXiv, citeseer, ETDs, Elsevier and PMC)
+ - Link live web probing prototype
+ - Link archive probing prototype
+ - Link Memento probing prototype
+ - Detailed Quantification Analysis toolkit (subject-aware, time-aware, general, etc.)
+ - Analysis code for each collection
+ - Document zoning toolkit
+ - Link type classification toolkit
+ - Link rot prediction toolkit
+
+
+LTG link extraction prototypes
+You can try it at for arxiv collection at: /disk/data2/zhouke/codes/link-extraction/arxiv4-links/20140328 Running: ./run.sh
+
+
+Note that most of the following components could enable parallel processing (multiple processes)
+Step 1: get all the XML links
+./runToXML.sh #argv[1] #argv[2]
+* #argv[1]: pdf-file-list path file (the file store the complete paths of all pdfs the need to be processed)
+* #argv[2]: directory of storing all the xmls
+
+
+Descriptions:
+This scripts generate xml files from pdfs using pdftohtml -xml
+
+
+Example:
+./runToXML.sh arxiv4-pdf-file-list-9701-0703 xml9701-0703
+
+
+
+
+Step 2: get condensed extracted links files from XML files
+mkdir xml-file-lists
+split -l 10000 $xml-file-list xml-file-list_
+mv xml-file-list_* xml-file-lists/
+./runToLinks.sh
+cat links-filter-LTG-prototype-v1-* >links-filter-LTG-prototype-v1-$dataname
+
+
+Descriptions:
+This file extract links from all the xml (pdf) in the xml-file-lists and then generate the condensed link file.
+It calls find-links-LTG-prototype-v1-xmlfilelist.py
+and the output file is ./links-LTG-prototype-v1-$dataname
+$dataname: you can use any name for this, based on your corresponding xml-file-list (what data it is)
+
+
+In addition, runToLinks.sh assumes that all the xml file lists (to be processed) are stored in xml-file-lists/.
+
+
+Step 3: genenrate summary files according to condense format of extracted links and abstract file (meta-data)
+Descriptions:
+This script generates all the summary files
+
+
+* # ARGV[0] -- abstract file path
+* # ARGV[1] -- condense extracted link file path
+* # ARGV[2] -- summary file directory (output)
+* # ARGV[3] -- duplink file path (for analysis, output)
+
+
+Example:
+perl getSummary.pl /disk/data1/backup/arxiv/zhouke/data/abstract/all_abstract_ftp.txt links-LTG-prototype-arxiv4-9701-1212.txt summaries links-LTG-prototype-arxiv4-0704-1212.duplink >links-LTG-prototype-arxiv4-0704-1212.meta
+
+
+
+
+Elsevier Link Extraction
+/disk/data2/zhouke/elsevier
+
+
+This is to combine both links extracted from summary.xsl (links from xml annotations) and links from the text.
+Basically, I use the link extraction prototype to extract links from the xml and then combine it with the summary file generated from summary.xsl.
+To add the textual links into the links, I use addTextLink.pl to achieve it.
+
+
+Link Momento and Live probing prototype
+
+
+This is a final version of probing checking scripts that are changed from LANL scripts. This includes both the live web checking and the probing checking.
+ETD collection is an example and you could use the similar code for the same purpose.
+/disk/data3/zhouke/momento/hiberlink-workflow/workflow_ETDs
+
+
+Memento Status:
+
+
+The process are as follows:
+# this is to process to get all the URLs from the summary files to prepare for Memento fetching
+python ./process_xml4mementos.py
+
+
+# this is to fetch the Momento status by retrieving all and store them
+python ./fetch_mementos.py
+
+
+# this is to read all the headers of the Momento status in order to know whether it has been archived or not
+python ./readheaders_mementos.py 
+
+
+To get final momento status for all the links:
+./run.sh
+This script utilizes getMementoStatus.pl to input a given set of links, to output the final memento status: memento-links-LTG-ETDs-phd-blackfiltered.status.
+
+
+Note that you have to make sure the SQL server for Memento has been running in the background.
+In addition, you should not use lots of threads (not more than 5) to run this otherwise Memento will crash.
+
+
+Live Web Status:
+The process is similar to the above:
+You run:
+python ./process_xml4live.py
+python ./fetch_liveWeb.py
+python ./readhearders_liveWeb.py
+
+
+
+
+Detailed Quantification Analysis toolkit
+You can take a look at /disk/data2/zhouke/data/ETDs/ETD2014-06-30/run.sh for an example to analyze ETD data.
+
+
+The process is as follows:
+
+
+
+
+
+
+
+
+
+
+perl getMeta-xml-file-list.pl ../abs/ETDs.abs ETDs-xml-file-list >ETDs-xml-docwithAllMeta.txt
+
+
+perl getMeta.pl ../abs/ETDs.abs links-filter-SpoonLib-fix2-ETDs-xml-file-list.txt >links-LTG-ETDs-all-withAllMeta.txt
+
+
+perl filterBlackHost.pl pmc-hosts-blacklist.txt links-LTG-ETDs-all-withAllMeta.txt >links-LTG-ETDs-all-blackfiltered-withAllMeta.txt
+
+
+
+
+# stats about master vs. phd thesis
+perl -lne 'm|.*?\t.*?\t.*?\tmaster|&&print $_' ETDs-xml-docwithAllMeta.txt | wc -l
+perl -lne 'm|.*?\t.*?\t.*?\tphd|&&print $_' ETDs-xml-docwithAllMeta.txt | wc -l
+wc -l ETDs-xml-docwithAllMeta.txt
+
+
+# get only the phd thesis for further analysis
+perl -lne 'm|.*?\t.*?\t.*?\tphd|&&print $_' ETDs-xml-docwithAllMeta.txt >ETDs-xml-phd-docwithAllMeta.txt
+perl -lne 'm|.*?\t.*?\t.*?\t.*?\tphd|&&print $_' links-LTG-ETDs-all-withAllMeta.txt 99>links-LTG-ETDs-phd-withAllMeta.txt
+perl -lne 'm|.*?\t.*?\t.*?\t.*?\tphd|&&print $_' links-LTG-ETDs-all-blackfiltered-withAllMeta.txt >links-LTG-ETDs-phd-blackfiltered-withAllMeta.txt
+
+
+
+
+# stats about # of docs per year
+perl -lne 'm|.*?\t.*?\t(.*?)\t(.*)|&&$count{$1}++; END {foreach $k(sort keys %count) {print "$k\t$count{$k}"}}' ETDs-xml-phd-docwithAllMeta.txt >> stats.txt
+
+
+# stats about # of docs per subjects
+perl -lne 'm|.*?\t(.*?)\t(.*?)\t(.*)|&&$count{$1}++; END {foreach $k(sort {$count{$b} <=> $count{$a}} keys %count) {print "$k\t$count{$k}"}}' ETDs-xml-phd-docwithAllMeta.txt >> stats.txt
+
+
+# stats about fraction of docs with links
+perl -lne 'm|(.*?)\t.*?\t(.*?)\t(.*?)\t|&&$count{$1}++; $sub{$1}=$2; $year{$1}=$3; END {foreach $k(sort keys %count) {print "$k\t$count{$k}\t$sub{$k}\t$year{$k}\tdummy"}}' links-LTG-ETDs-phd-blackfiltered-withAllMeta.txt  >links-LTG-ETDs-phd-blackfiltered-freq.txt
+wc -l links-LTG-ETDs-phd-blackfiltered-freq.txt
+wc -l ETDs-xml-phd-docwithAllMeta.txt
+
+
+
+
+# stats on time-aware analysis for frac (num) of docs with links
+perl -lne 'm|.*?\t.*?\t.*?\t(.*?)\t|&&$count{$1}++; END {foreach $k(sort keys %count) {print "$k\t$count{$k}"}}' links-LTG-ETDs-phd-blackfiltered-freq.txt
+
+
+
+
+# stats on subject-aware analysis for frac (num) of docs with links
+perl -lne 'm|.*?\t.*?\t(.*?)\t.*|&&$count{$1}++; END {foreach $k(sort {$count{$b} <=> $count{$a}} keys %count) {print "$k\t$count{$k}"}}' links-LTG-ETDs-phd-blackfiltered-freq.txt
+
+
+
+
+
+
+# stats about total num of links
+wc -l links-LTG-ETDs-phd-blackfiltered-withAllMeta.txt
+
+
+
+
+# get the link status (live web and internet archive)
+# liveweb -> already have: /disk/data2/zhouke/codes/probe/wget-liveweb/ETDs/URLavail-links-ETDs-blackfiltered.txt
+# archive -> still need to obtain
+
+
+# get unique links to proble (in archive)
+perl -lne 'm|.*?\t(.*?)\t|&&print $1' links-LTG-ETDs-phd-blackfiltered-withAllMeta.txt |sort |uniq >links-LTG-ETDs-phd-blackfiltered.unique
+# get archive status
+cp links-LTG-ETDs-phd-blackfiltered.unique /disk/data2/zhouke/codes/probe/wget-archive/ETDs/
+cd /disk/data2/zhouke/codes/probe/wget-archive/ETDs
+split -l 1000 links-LTG-ETDs-phd-blackfiltered.unique links-LTG-ETDs-phd-blackfiltered_
+mv links-LTG-ETDs-phd-blackfiltered_* links/
+perl run.pl
+#wait to finish
+mv URLArchiveAvail/URLArchiveAvail-links-LTG-ETDs-phd-blackfiltered_*-* ./
+cat URLArchiveAvail/URLArchiveAvail-links-LTG-ETDs-phd-blackfiltered_* >URLArchiveAvail-links-LTG-ETDs-phd-blackfiltered.unique
+mv URLArchiveAvail-links-LTG-ETDs-phd-blackfiltered_*-* URLArchiveAvail/
+cd /disk/data2/zhouke/data/ETDs/ETD2014-06-12/
+
+
+# get final link status file (link \t live (T or F) \t archive (T or F)
+# by combining /disk/data2/zhouke/codes/probe/wget-archive/ETDs/URLArchiveAvail-links-LTG-ETDs-phd-blackfiltered.unique
+# and /disk/data2/zhouke/codes/probe/wget-liveweb/ETDs/URLavail-links-ETDs-blackfiltered.txt
+cp /disk/data2/zhouke/codes/probe/wget-archive/ETDs/URLArchiveAvail-links-LTG-ETDs-phd-blackfiltered.unique ./
+perl -lne 'm|.*?\t(.*?)\t.*?\t(.*)|&&print "null\t$1\t$2"' /disk/data2/zhouke/codes/probe/wget-liveweb/ETDs/URLavail-links-ETDs-blackfiltered.txt |sort |uniq >URLavail-links-ETDs-blackfiltered.unique
+# not useful
+perl getStdStatus.pl >ETDs-links-phd-unique_stats_4ltg.dat
+
+
+perl getLinkStatus.pl>ETDs-links-phd-unique.status
+
+
+
+
+# calc stats on link rot analysis
+# also perform time and subject and general analysis
+perl calcStats.pl ETDs-links-phd-unique.status
+
+
+
+
+# prepare Dataset requested by Peter on June 17 2014
+perl preparePeterDataset.pl ETDs-links-phd-unique.status ETDs-xml-phd-docwithAllMeta.txt
+
+
+# analyze for Peter on 2005/2006 jump
+perl analyze4Peter.pl Peters.dataset
+
+
+# get all link num for Peter (by year)
+perl -lne 'm|.*?\t.*?\t.*?\t(.*?)\t|&&$count{$1}++; END {foreach $k(sort keys %count) {print "$k\t$count{$k}"}}' links-LTG-ETDs-phd-blackfiltered-withAllMeta.txt >Peters.allLinks
+
+
+
+
+Document Zoning Toolkit
+Check here for some of the details.
+/disk/data2/zhouke/structures/pdfx_v1.8.4_linux_i386/runArxiv.sh
+
+
+Basically, this script reads a file list of all the paths of all the pdfs that requires structural analysis, and then run in parallel using the tool we got from Manchester Univeristy.
+It also sets up the maximum limits of half an hour if it takes too long for one pdf.
+
+
+
+
+Collections
+Original Raw Data 
+arXiv: /disk/data2/zhouke/arxiv4
+Elsevier: /disk/data2/zhouke/elsevier
+ETDs: /disk/data2/zhouke/data/ETDs
+PMC: /disk/data2/zhouke/data/PMC
+Citeseer: original PDF and XML data folder deleted??
+CORE: /disk/data3/zhouke/COREdata
+
+
+All the Extracted Links (Summary files) from the collections above
+/disk/data2/zhouke/codes/link-extraction
+arXiv: arxiv4-links
+Elsevier: elsevier-links
+ETDs: ETDs-links
+PMC: PMC-links
+Citeseer: citeseer-links
